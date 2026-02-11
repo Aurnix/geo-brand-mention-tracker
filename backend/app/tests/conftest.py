@@ -19,11 +19,14 @@ os.environ.setdefault("ANTHROPIC_API_KEY", "test-key")
 os.environ.setdefault("PERPLEXITY_API_KEY", "test-key")
 os.environ.setdefault("GOOGLE_AI_API_KEY", "test-key")
 
+import uuid as _uuid_mod
+
 import pytest
 from uuid import uuid4
 from datetime import datetime, date, timezone
 
 from httpx import AsyncClient, ASGITransport
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.pool import StaticPool
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -53,6 +56,11 @@ TEST_DATABASE_URL = "sqlite+aiosqlite://"
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
+def _gen_random_uuid() -> str:
+    """SQLite user-defined function to mimic PostgreSQL gen_random_uuid()."""
+    return str(_uuid_mod.uuid4())
+
+
 @pytest.fixture(scope="function")
 async def async_engine():
     engine = create_async_engine(
@@ -60,6 +68,13 @@ async def async_engine():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+
+    # Register the gen_random_uuid() function on every raw DBAPI connection
+    # so that DEFAULT gen_random_uuid() works in CREATE TABLE DDL.
+    @event.listens_for(engine.sync_engine, "connect")
+    def _register_sqlite_functions(dbapi_conn, connection_record):
+        dbapi_conn.create_function("gen_random_uuid", 0, _gen_random_uuid)
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield engine
