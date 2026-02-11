@@ -1,0 +1,71 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-geotrack}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-geotrack}
+      POSTGRES_DB: ${POSTGRES_DB:-geotrack}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U geotrack"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://geotrack:geotrack@db:5432/geotrack
+      DATABASE_URL_SYNC: postgresql://geotrack:geotrack@db:5432/geotrack
+      JWT_SECRET: ${JWT_SECRET:-change-me-to-a-real-secret-in-production}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      JWT_EXPIRATION_MINUTES: ${JWT_EXPIRATION_MINUTES:-1440}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
+      GOOGLE_AI_API_KEY: ${GOOGLE_AI_API_KEY:-}
+      PARSER_MODEL: ${PARSER_MODEL:-gpt-4o-mini}
+      PARSER_PROVIDER: ${PARSER_PROVIDER:-openai}
+      RUN_SCHEDULE_HOUR: ${RUN_SCHEDULE_HOUR:-3}
+      RUN_SCHEDULE_MINUTE: ${RUN_SCHEDULE_MINUTE:-0}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: >
+      sh -c "python -c '
+      from app.models import Base
+      from app.database import sync_engine
+      Base.metadata.create_all(bind=sync_engine)
+      print(\"Database tables created.\")
+      ' && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-change-me-to-a-real-secret-in-production}
+      NEXTAUTH_URL: http://localhost:3000
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+
+volumes:
+  postgres_data:
