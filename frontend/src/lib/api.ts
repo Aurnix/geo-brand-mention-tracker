@@ -139,7 +139,7 @@ class ApiClient {
     data: { query_text?: string; category?: string; is_active?: boolean }
   ) {
     return this.request<any>(`/api/queries/${id}`, {
-      method: "PUT",
+      method: "PATCH",
       body: JSON.stringify(data),
     });
   }

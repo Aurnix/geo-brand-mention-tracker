@@ -16,6 +16,7 @@ from app.schemas.result import (
     OverviewResponse,
     MentionRateTrend,
     PaginatedResults,
+    QueryWinner,
     ResultResponse,
     SentimentBreakdown,
 )
@@ -292,7 +293,54 @@ async def get_competitor_comparison(
             )
         )
 
+    # Build query_winners: per-query, per-engine top recommendation winner
+    query_map: dict[UUID, str] = {}
+    queries_result = await db.execute(
+        select(MonitoredQuery).where(MonitoredQuery.brand_id == brand_id)
+    )
+    for q in queries_result.scalars().all():
+        query_map[q.id] = q.query_text
+
+    # Group results by (query_id, engine) and find the latest result per group
+    latest_results: dict[tuple[UUID, str], QueryResult] = {}
+    for r in results_list:
+        key = (r.query_id, r.engine)
+        if key not in latest_results or r.run_date > latest_results[key].run_date:
+            latest_results[key] = r
+
+    # For each query, determine the winner per engine
+    query_winners_map: dict[UUID, dict[str, str | None]] = {}
+    comp_names_lookup = {
+        comp.name.lower(): comp.name for comp in competitors
+    }
+    for comp in competitors:
+        for alias in (comp.aliases or []):
+            comp_names_lookup[alias.lower()] = comp.name
+
+    for (qid, eng), r in latest_results.items():
+        if qid not in query_winners_map:
+            query_winners_map[qid] = {}
+        winner: str | None = None
+        if r.is_top_recommendation:
+            winner = brand.name
+        elif r.competitor_mentions:
+            for comp_key, comp_data in r.competitor_mentions.items():
+                is_top = False
+                if isinstance(comp_data, dict):
+                    is_top = comp_data.get("is_top_recommendation", False)
+                if is_top:
+                    winner = comp_names_lookup.get(comp_key.lower(), comp_key)
+                    break
+        query_winners_map[qid][eng] = winner
+
+    query_winners = [
+        QueryWinner(query_text=query_map[qid], winners=winners)
+        for qid, winners in query_winners_map.items()
+        if qid in query_map
+    ]
+
     return CompetitorComparisonResponse(
         brand=brand_entry,
         competitors=competitor_entries,
+        query_winners=query_winners,
     )

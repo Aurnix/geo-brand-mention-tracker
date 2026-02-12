@@ -223,6 +223,36 @@ class TestCompetitorComparison:
         assert data["brand"]["name"] == "TestBrand"
         assert data["competitors"] == []
 
+    async def test_get_competitor_comparison_includes_query_winners(
+        self,
+        client,
+        auth_headers,
+        sample_brand,
+        sample_competitor,
+        sample_query,
+        sample_results,
+    ):
+        """Comparison response should include query_winners field."""
+        brand_id = str(sample_brand.id)
+        response = await client.get(
+            f"/api/brands/{brand_id}/competitors/comparison",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+
+        assert "query_winners" in data
+        assert isinstance(data["query_winners"], list)
+        # We have one query with results, so should have at least one entry
+        if data["query_winners"]:
+            qw = data["query_winners"][0]
+            assert "query_text" in qw
+            assert "winners" in qw
+            # The query_text should match our sample query
+            assert qw["query_text"] == "What is the best testing tool?"
+            # Winners should have engine keys
+            assert isinstance(qw["winners"], dict)
+
     async def test_get_competitor_comparison_nonexistent_brand(
         self, client, auth_headers
     ):

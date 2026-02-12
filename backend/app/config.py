@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     PARSER_MODEL: str = "gpt-4o-mini"
     PARSER_PROVIDER: str = "openai"
 
+    CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
+
     RUN_SCHEDULE_HOUR: int = 3
     RUN_SCHEDULE_MINUTE: int = 0
 
