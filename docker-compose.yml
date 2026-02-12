@@ -43,12 +43,7 @@ services:
     volumes:
       - ./backend:/app
     command: >
-      sh -c "python -c '
-      from app.models import Base
-      from app.database import sync_engine
-      Base.metadata.create_all(bind=sync_engine)
-      print(\"Database tables created.\")
-      ' && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+      sh -c "python -c 'from app.models import Base; from app.database import sync_engine; Base.metadata.create_all(bind=sync_engine); print(\"Database tables created.\")' && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
   frontend:
     build:
