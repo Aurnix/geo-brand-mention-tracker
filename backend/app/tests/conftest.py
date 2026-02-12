@@ -3,7 +3,7 @@ Shared test fixtures for the GeoTrack backend test suite.
 
 Uses aiosqlite in-memory database for test isolation.
 Handles UUID-to-string conversion for SQLite compatibility with
-PostgreSQL-specific PG_UUID columns.
+PostgreSQL-specific PG_UUID columns and gen_random_uuid() defaults.
 """
 
 import os
@@ -22,6 +22,7 @@ os.environ.setdefault("GOOGLE_AI_API_KEY", "test-key")
 import uuid as _uuid_mod
 
 import pytest
+import sqlalchemy as sa
 from uuid import uuid4
 from datetime import datetime, date, timezone
 
@@ -33,8 +34,9 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from passlib.context import CryptContext
 from jose import jwt
 
-# Compile PG_UUID as VARCHAR(36) when targeting SQLite.
-# This must be registered before any metadata/table creation.
+# ---------------------------------------------------------------------------
+# SQLite compatibility: compile PG_UUID as VARCHAR(36)
+# ---------------------------------------------------------------------------
 from sqlalchemy.ext.compiler import compiles
 
 
@@ -43,6 +45,9 @@ def compile_pg_uuid_for_sqlite(type_, compiler, **kw):
     return "VARCHAR(36)"
 
 
+# ---------------------------------------------------------------------------
+# App imports (after env vars are set)
+# ---------------------------------------------------------------------------
 from app.main import app
 from app.database import get_db, Base
 from app.models.user import User
@@ -61,16 +66,78 @@ def _gen_random_uuid() -> str:
     return str(_uuid_mod.uuid4())
 
 
+# ---------------------------------------------------------------------------
+# Patch metadata: replace gen_random_uuid() server defaults with Python-side
+# defaults so that INSERTs without explicit IDs work on SQLite.
+# This needs to run exactly once before any create_all().
+# ---------------------------------------------------------------------------
+_metadata_patched = False
+
+
+class _SQLiteUUID(sa.types.TypeDecorator):
+    """A UUID type that works with both PostgreSQL and SQLite.
+
+    Stores UUIDs as 36-character strings in SQLite while accepting
+    and returning ``uuid.UUID`` objects in Python.
+    """
+
+    impl = sa.String(36)
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is not None:
+            if isinstance(value, _uuid_mod.UUID):
+                return str(value)
+            return str(value)
+        return value
+
+    def process_result_value(self, value, dialect):
+        if value is not None:
+            if not isinstance(value, _uuid_mod.UUID):
+                return _uuid_mod.UUID(str(value))
+            return value
+        return value
+
+
+def _patch_metadata_for_sqlite():
+    global _metadata_patched
+    if _metadata_patched:
+        return
+    _metadata_patched = True
+
+    for table in Base.metadata.tables.values():
+        for column in table.columns:
+            # Replace PG_UUID type with our SQLite-compatible UUID type
+            if isinstance(column.type, PG_UUID):
+                column.type = _SQLiteUUID()
+
+            # Replace gen_random_uuid() server defaults with Python defaults
+            sd = column.server_default
+            if sd is not None and hasattr(sd, "arg"):
+                text_val = str(sd.arg)
+                if "gen_random_uuid" in text_val:
+                    column.server_default = None
+                    if column.default is None:
+                        column.default = sa.ColumnDefault(_uuid_mod.uuid4)
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+
 @pytest.fixture(scope="function")
 async def async_engine():
+    _patch_metadata_for_sqlite()
+
     engine = create_async_engine(
         TEST_DATABASE_URL,
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
 
-    # Register the gen_random_uuid() function on every raw DBAPI connection
-    # so that DEFAULT gen_random_uuid() works in CREATE TABLE DDL.
+    # Register gen_random_uuid() on each raw DBAPI connection in case any
+    # raw SQL references it.
     @event.listens_for(engine.sync_engine, "connect")
     def _register_sqlite_functions(dbapi_conn, connection_record):
         dbapi_conn.create_function("gen_random_uuid", 0, _gen_random_uuid)
@@ -100,7 +167,12 @@ async def client(async_engine):
 
     async def override_get_db():
         async with session_factory() as session:
-            yield session
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
 
     app.dependency_overrides[get_db] = override_get_db
     async with AsyncClient(
