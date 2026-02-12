@@ -19,26 +19,39 @@ Whether your brand shows up in those AI-generated answers is becoming as importa
 3. **GeoTrack runs those queries daily** across ChatGPT, Claude, Perplexity, and Gemini
 4. **See your AI visibility on a dashboard** — mention rates, sentiment, trends, competitor comparison
 
+## Features
+
+- **Multi-engine tracking** — Query ChatGPT (GPT-4o), Claude (Sonnet), Perplexity (Sonar), and Gemini (2.0 Flash) from a single dashboard
+- **Brand mention detection** — Case-insensitive matching across brand names and aliases
+- **Sentiment analysis** — LLM-powered detection of positive, neutral, negative, and mixed sentiment
+- **Position tracking** — First mention? Top recommendation? Early, middle, or late in the response?
+- **Competitor monitoring** — Track how competitors show up in the same queries with per-competitor sentiment
+- **Citation tracking** — See which URLs Perplexity cites when it mentions your brand
+- **Historical trends** — Daily data collection builds a picture of your AI visibility over time
+- **Manual triggers** — Run a scan on demand from the dashboard
+- **Plan-based limits** — Free, Pro, and Agency tiers with enforced resource limits
+
 ## Dashboard
 
-<!-- TODO: Add screenshots after build -->
+**Overview** — Brand mention rate across all AI engines, trending over time. Engine-by-engine breakdown. Sentiment donut chart. Top recommendation rate.
 
-**Overview** — Your brand mention rate across all AI engines, trending over time.
+**Queries** — Table of monitored queries with per-engine status icons. Expandable rows showing historical results, full AI response text, and trend charts.
 
-**Query Detail** — Drill into any query to see exactly what each AI engine said about your brand.
-
-**Competitor Comparison** — Side-by-side visibility: who's getting recommended and where.
+**Competitors** — Side-by-side bar chart comparison of mention rates. Sentiment breakdown table. Query-level winner tracking per engine.
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Backend | Python, FastAPI, SQLAlchemy |
-| Database | PostgreSQL |
-| Frontend | Next.js, Tailwind CSS, Recharts |
-| Auth | NextAuth.js |
-| Scheduling | APScheduler |
-| Containerization | Docker Compose |
+| Layer | Technology | Version |
+|-------|-----------|---------|
+| Backend | Python, FastAPI, SQLAlchemy (async) | 3.12, 0.115, 2.0 |
+| Database | PostgreSQL | 16 |
+| Frontend | Next.js (App Router), TypeScript | 14.2 |
+| Styling | Tailwind CSS | 3.4 |
+| Charts | Recharts | 2.15 |
+| Auth | JWT (backend) + NextAuth.js (frontend) | — |
+| Scheduling | APScheduler | 3.10 |
+| AI Engines | OpenAI, Anthropic, Perplexity, Google Gemini | — |
+| Containerization | Docker Compose | — |
 
 ## Quick Start
 
@@ -54,12 +67,13 @@ cp .env.example .env
 # Run
 docker compose up --build
 
-# Seed demo data (optional — populates dashboard with sample data)
+# Seed demo data (optional — populates 30 days of realistic data for Notion + Airtable)
 docker compose exec backend python -m app.seed
 
 # Open
 # Frontend: http://localhost:3000
 # API docs: http://localhost:8000/docs
+# Demo login: demo@geotrack.app / demo123456
 ```
 
 ## API Keys Required
@@ -68,7 +82,7 @@ GeoTrack queries AI engines on your behalf. You'll need API keys for the engines
 
 | Engine | Get a key | Required? |
 |--------|----------|-----------|
-| OpenAI | [platform.openai.com](https://platform.openai.com) | Yes (free tier) |
+| OpenAI | [platform.openai.com](https://platform.openai.com) | Yes (also used for response parsing) |
 | Anthropic | [console.anthropic.com](https://console.anthropic.com) | Yes (free tier) |
 | Perplexity | [docs.perplexity.ai](https://docs.perplexity.ai) | Optional (Pro tier) |
 | Google Gemini | [aistudio.google.com](https://aistudio.google.com) | Optional (Pro tier) |
@@ -76,33 +90,68 @@ GeoTrack queries AI engines on your behalf. You'll need API keys for the engines
 ## Architecture
 
 ```
-┌─────────────┐     ┌──────────────┐     ┌──────────────────┐
-│   Next.js    │────▶│   FastAPI     │────▶│   PostgreSQL     │
-│   Frontend   │◀────│   Backend     │◀────│   Database       │
-└─────────────┘     └──────┬───────┘     └──────────────────┘
+                                    ┌──────────────────┐
+┌─────────────┐     ┌──────────────┤   PostgreSQL 16   │
+│   Next.js   │────▶│   FastAPI    │   (Docker)        │
+│   Frontend  │◀────│   Backend    ├──────────────────┘
+│   :3000     │     │   :8000      │
+└─────────────┘     └──────┬───────┘
                            │
                     ┌──────┴───────┐
-                    │  Scheduler   │
-                    │  (APScheduler)│
+                    │  APScheduler │
+                    │  Daily Cron  │
                     └──────┬───────┘
                            │
-              ┌────────────┼────────────┐
-              ▼            ▼            ▼
-         ┌────────┐  ┌────────┐  ┌────────┐
-         │ OpenAI │  │ Claude │  │Perplx. │  ...
-         └────────┘  └────────┘  └────────┘
+          ┌────────┬───────┼────────┬─────────┐
+          ▼        ▼       ▼        ▼         ▼
+     ┌────────┐┌───────┐┌────────┐┌───────┐┌─────────┐
+     │ OpenAI ││Claude ││Perplx. ││Gemini ││gpt-4o-  │
+     │ gpt-4o ││Sonnet ││ Sonar  ││ Flash ││mini     │
+     └────────┘└───────┘└────────┘└───────┘│(parser) │
+                                           └─────────┘
 ```
 
-## Features
+## API Endpoints
 
-- **Multi-engine tracking** — Query ChatGPT, Claude, Perplexity, and Gemini from a single dashboard
-- **Brand mention detection** — Fuzzy matching across brand names and aliases
-- **Sentiment analysis** — Is the AI recommending you enthusiastically or mentioning you as an afterthought?
-- **Position tracking** — Are you the first brand mentioned? The top recommendation?
-- **Competitor monitoring** — Track how competitors show up in the same queries
-- **Citation tracking** — See which URLs Perplexity cites when it mentions your brand
-- **Historical trends** — Daily data collection builds a picture of your AI visibility over time
-- **Manual triggers** — Run a scan on demand, don't wait for the daily schedule
+### Auth
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/auth/signup` | Create account, returns JWT |
+| POST | `/api/auth/login` | Login, returns JWT |
+| GET | `/api/auth/me` | Current user info |
+
+### Brands
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/brands` | List user's brands |
+| POST | `/api/brands` | Create brand |
+| GET | `/api/brands/{id}` | Get brand |
+| PUT | `/api/brands/{id}` | Update brand |
+| DELETE | `/api/brands/{id}` | Delete brand (cascades) |
+| POST | `/api/brands/{id}/run` | Trigger manual scan |
+
+### Competitors
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/brands/{id}/competitors` | List competitors |
+| POST | `/api/brands/{id}/competitors` | Add competitor |
+| DELETE | `/api/brands/{id}/competitors/{cid}` | Remove competitor |
+
+### Queries
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/brands/{id}/queries` | List queries |
+| POST | `/api/brands/{id}/queries` | Add query |
+| PATCH | `/api/queries/{id}` | Update query |
+| DELETE | `/api/queries/{id}` | Delete query |
+
+### Dashboard Data
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/brands/{id}/overview` | Scorecard (mention rate, trends, sentiment) |
+| GET | `/api/brands/{id}/results` | Paginated results with filters |
+| GET | `/api/queries/{id}/history` | Time-series results for a query |
+| GET | `/api/brands/{id}/competitors/comparison` | Competitor comparison data |
 
 ## Plan Tiers
 
@@ -110,14 +159,50 @@ GeoTrack queries AI engines on your behalf. You'll need API keys for the engines
 |---------|------|-----|--------|
 | Brands | 1 | 3 | Unlimited |
 | Queries / brand | 10 | 100 | 500 |
-| Engines | 2 | 4 | 4 |
+| Engines | 2 (OpenAI + Anthropic) | All 4 | All 4 |
 | Frequency | Weekly | Daily | Daily |
 | Competitors | 2 | 10 | Unlimited |
-| Export | — | CSV/PDF | CSV/PDF |
+
+## Testing
+
+The backend has comprehensive tests using pytest with aiosqlite for database isolation:
+
+```bash
+cd backend
+pip install -r requirements.txt
+pytest -v                    # Run all tests
+pytest --cov=app --cov-report=term-missing  # With coverage
+```
+
+**Test coverage includes:**
+- Auth (signup, login, JWT validation, edge cases) — 10 tests
+- Brands (CRUD, ownership checks, plan limits) — 14 tests
+- Competitors (add, list, delete, cross-brand protection) — 10 tests
+- Queries (CRUD, brand ownership, plan limits) — 13 tests
+- Results (overview aggregation, pagination, filtering, history, comparison) — 13 tests
+- Response parser (mention detection, position, sentiment, top-rec, competitor extraction) — 16 tests
+- Plan limits (unit + integration, all three tiers) — 14 tests
+
+**Total: ~90 tests**
+
+## Seed Data
+
+The seed script creates realistic demo data for impressive dashboards:
+
+- **1 demo user** — demo@geotrack.app / demo123456 (Pro plan)
+- **2 brands** — Notion and Airtable with competitors
+- **20 queries per brand** — Mix of purchase intent, comparison, and informational
+- **30 days of results** — 4 engines x 20 queries x 30 days = 2,400 results per brand
+- **Realistic patterns** — Notion at ~60% mention rate (trending up), engine-specific variation, natural daily variance
 
 ## Project Status
 
-🚧 **Early development** — This is a working MVP. Core tracking and dashboard functionality is in place. Payment processing and some advanced features are on the roadmap.
+This is a working MVP. Core tracking and dashboard functionality is complete. The application demonstrates:
+- Full-stack async Python + Next.js architecture
+- Multi-provider AI API integration
+- LLM-powered text analysis pipeline
+- Real-time dashboard with data visualization
+- Plan-based access control
 
 ## Roadmap
 
@@ -125,13 +210,9 @@ GeoTrack queries AI engines on your behalf. You'll need API keys for the engines
 - [ ] White-label reports for agencies
 - [ ] Semantic search across stored responses
 - [ ] Slack/email alerts for visibility changes
-- [ ] Public API
+- [ ] CSV/PDF export
 - [ ] Query suggestions powered by AI
 - [ ] "How to improve your GEO" recommendations
-
-## Contributing
-
-This is currently a solo project, but feedback and ideas are welcome. Open an issue or reach out.
 
 ## License
 

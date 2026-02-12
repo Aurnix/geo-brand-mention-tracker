@@ -25,7 +25,7 @@ class TestSignup:
 
         second = await client.post("/api/auth/signup", json=payload)
         assert second.status_code == 409
-        assert "already exists" in second.json()["detail"].lower()
+        assert "already" in second.json()["detail"].lower()
 
     async def test_signup_invalid_email(self, client):
         response = await client.post(

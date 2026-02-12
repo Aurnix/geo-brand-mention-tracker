@@ -42,7 +42,10 @@ async def signup(body: UserCreate, db: AsyncSession = Depends(get_db)) -> TokenR
     await db.refresh(user)
 
     token = create_access_token(str(user.id))
-    return TokenResponse(access_token=token)
+    return TokenResponse(
+        access_token=token,
+        user=UserResponse.model_validate(user),
+    )
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -57,7 +60,10 @@ async def login(body: UserLogin, db: AsyncSession = Depends(get_db)) -> TokenRes
         )
 
     token = create_access_token(str(user.id))
-    return TokenResponse(access_token=token)
+    return TokenResponse(
+        access_token=token,
+        user=UserResponse.model_validate(user),
+    )
 
 
 @router.get("/me", response_model=UserResponse)
