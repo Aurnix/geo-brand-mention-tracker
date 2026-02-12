@@ -89,11 +89,27 @@ docker compose exec backend python -m app.seed  # Load demo data
 
 ```bash
 cd backend && pip install -r requirements.txt
-pytest                      # Run all tests
-pytest --cov=app            # With coverage
+pytest app/tests/           # Run all tests (tests dir is inside app/)
+pytest app/tests/ --cov=app # With coverage
 ```
 
 Tests use aiosqlite in-memory DB. The conftest patches PG_UUID → VARCHAR(36) and replaces gen_random_uuid() server defaults with Python-side uuid4 defaults for SQLite compatibility.
+
+## Demo Data
+
+```bash
+docker compose exec backend python -m app.seed
+```
+
+- Seed is idempotent — checks for existing demo user (`demo@geotrack.ai` / `demo1234`) before inserting
+- Creates 2 brands (Notion, Airtable) with competitors, 40 queries, and ~30 days of results across all 4 engines
+- To re-seed: wipe the DB first (`docker compose down -v && docker compose up --build`)
+
+## Known Gotchas
+
+- **Backend OverviewResponse vs frontend**: The backend returns `mention_rate_trend` (array), `top_rec_rate`, `engine_breakdown` (dict), and `sentiment_breakdown` (object). The frontend dashboard must transform these shapes for Recharts (arrays, percentages). If adding new overview fields, update both `backend/app/schemas/result.py` and `frontend/src/app/dashboard/page.tsx`.
+- **NextAuth NEXTAUTH_URL**: Must be set to `http://localhost:3000` (the browser-facing URL), not the Docker-internal service name. `NEXT_PUBLIC_API_URL` is what the browser uses to reach the backend.
+- **competitor_mentions JSON shape**: Each competitor entry in `QueryResult.competitor_mentions` should include `{mentioned, sentiment, position, is_top_recommendation}`. The competitor comparison endpoint reads `is_top_recommendation` to determine query winners.
 
 ## API Endpoints
 
