@@ -35,13 +35,12 @@ import {
 
 interface OverviewData {
   mention_rate: number;
-  mention_rate_trend: number;
-  top_recommendation_rate: number;
+  mention_rate_trend: { date: string; rate: number }[];
+  top_rec_rate: number;
   total_queries: number;
   total_runs: number;
-  trend_data: { date: string; mention_rate: number }[];
-  engine_breakdown: { engine: string; mention_rate: number }[];
-  sentiment_breakdown: { sentiment: string; count: number }[];
+  engine_breakdown: Record<string, number>;
+  sentiment_breakdown: { positive: number; neutral: number; negative: number; mixed: number };
 }
 
 // ── Skeleton components ─────────────────────────────────────
@@ -245,27 +244,39 @@ export default function DashboardOverview() {
   }
 
   // ── Format chart data ───────────────────────────
-  const trendData = data.trend_data.map((d) => ({
-    ...d,
+  const trendData = data.mention_rate_trend.map((d) => ({
     date: new Date(d.date).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
     }),
-    mention_rate: Math.round(d.mention_rate * 100) / 100,
+    mention_rate: Math.round(d.rate * 10000) / 100,
   }));
 
-  const engineData = data.engine_breakdown.map((d) => ({
-    engine: ENGINE_DISPLAY_NAMES[d.engine] || d.engine,
-    mention_rate: Math.round(d.mention_rate * 100) / 100,
+  const engineData = Object.entries(data.engine_breakdown).map(([engine, rate]) => ({
+    engine: ENGINE_DISPLAY_NAMES[engine] || engine,
+    mention_rate: Math.round(rate * 10000) / 100,
   }));
 
-  const sentimentData = data.sentiment_breakdown.map((d) => ({
-    name: d.sentiment.charAt(0).toUpperCase() + d.sentiment.slice(1),
-    value: d.count,
-    color: SENTIMENT_COLORS[d.sentiment] || "#94a3b8",
+  const sentimentData = Object.entries(data.sentiment_breakdown).map(([sentiment, count]) => ({
+    name: sentiment.charAt(0).toUpperCase() + sentiment.slice(1),
+    value: count,
+    color: SENTIMENT_COLORS[sentiment] || "#94a3b8",
   }));
 
-  const trendDirection = data.mention_rate_trend >= 0;
+  // Compute trend: compare second-half average vs first-half average
+  const trendPoints = data.mention_rate_trend;
+  const mid = Math.floor(trendPoints.length / 2);
+  const recentAvg =
+    trendPoints.length > 0
+      ? trendPoints.slice(mid).reduce((s, d) => s + d.rate, 0) /
+        (trendPoints.length - mid)
+      : 0;
+  const olderAvg =
+    mid > 0
+      ? trendPoints.slice(0, mid).reduce((s, d) => s + d.rate, 0) / mid
+      : recentAvg;
+  const trendDelta = (recentAvg - olderAvg) * 100;
+  const trendDirection = trendDelta >= 0;
 
   return (
     <div>
@@ -306,7 +317,7 @@ export default function DashboardOverview() {
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-3xl font-bold text-gray-900">
-              {data.mention_rate.toFixed(1)}%
+              {(data.mention_rate * 100).toFixed(1)}%
             </span>
             <span
               className={`inline-flex items-center gap-0.5 text-sm font-medium ${
@@ -318,7 +329,7 @@ export default function DashboardOverview() {
               ) : (
                 <TrendingDown className="h-4 w-4" />
               )}
-              {Math.abs(data.mention_rate_trend).toFixed(1)}%
+              {Math.abs(trendDelta).toFixed(1)}%
             </span>
           </div>
           <p className="mt-1 text-xs text-gray-400">vs previous period</p>
@@ -332,7 +343,7 @@ export default function DashboardOverview() {
           </div>
           <div className="mt-2">
             <span className="text-3xl font-bold text-gray-900">
-              {data.top_recommendation_rate.toFixed(1)}%
+              {(data.top_rec_rate * 100).toFixed(1)}%
             </span>
           </div>
           <p className="mt-1 text-xs text-gray-400">
