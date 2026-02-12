@@ -180,3 +180,32 @@ class TestDeleteBrand:
             f"/api/brands/{fake_id}", headers=auth_headers
         )
         assert response.status_code == 404
+
+
+class TestManualRun:
+    async def test_trigger_run(self, client, auth_headers, sample_brand):
+        """POST /brands/{id}/run should return 200 with status started."""
+        brand_id = str(sample_brand.id)
+        response = await client.post(
+            f"/api/brands/{brand_id}/run",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "started"
+        assert "triggered" in data["message"].lower()
+
+    async def test_trigger_run_nonexistent_brand(self, client, auth_headers):
+        """Should return 404 for a brand that doesn't exist."""
+        fake_id = str(uuid4())
+        response = await client.post(
+            f"/api/brands/{fake_id}/run",
+            headers=auth_headers,
+        )
+        assert response.status_code == 404
+
+    async def test_trigger_run_unauthorized(self, client, sample_brand):
+        """Should reject unauthenticated requests."""
+        brand_id = str(sample_brand.id)
+        response = await client.post(f"/api/brands/{brand_id}/run")
+        assert response.status_code in (401, 403)

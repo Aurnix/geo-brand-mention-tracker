@@ -50,9 +50,15 @@ class CompetitorComparisonEntry(BaseModel):
     sentiment_breakdown: SentimentBreakdown
 
 
+class QueryWinner(BaseModel):
+    query_text: str
+    winners: dict[str, str | None]
+
+
 class CompetitorComparisonResponse(BaseModel):
     brand: CompetitorComparisonEntry
     competitors: list[CompetitorComparisonEntry]
+    query_winners: list[QueryWinner] = []
 
 
 class PaginatedResults(BaseModel):
