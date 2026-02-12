@@ -843,6 +843,7 @@ def _pick_position(is_top: bool) -> str:
 def _build_competitor_mentions(
     competitor_names: list[str],
     brand_mentioned: bool,
+    brand_is_top: bool,
     category: str,
 ) -> dict:
     """Build competitor_mentions JSON for a single result."""
@@ -867,7 +868,17 @@ def _build_competitor_mentions(
             "mentioned": mentioned,
             "sentiment": sentiment,
             "position": position,
+            "is_top_recommendation": False,
         }
+
+    # When the brand is NOT the top recommendation, pick one mentioned
+    # competitor (~30% chance) to be the winner for this result.
+    if not brand_is_top:
+        mentioned_comps = [n for n, d in mentions.items() if d["mentioned"]]
+        if mentioned_comps and random.random() < 0.30:
+            winner = random.choice(mentioned_comps)
+            mentions[winner]["is_top_recommendation"] = True
+
     return mentions
 
 
@@ -1050,7 +1061,7 @@ async def seed() -> None:
 
                     # Competitor mentions
                     competitor_mentions = _build_competitor_mentions(
-                        notion_competitor_names, brand_mentioned, category
+                        notion_competitor_names, brand_mentioned, is_top, category
                     )
 
                     # Raw response
@@ -1115,7 +1126,7 @@ async def seed() -> None:
 
                     # Competitor mentions
                     competitor_mentions = _build_competitor_mentions(
-                        airtable_competitor_names, brand_mentioned, category
+                        airtable_competitor_names, brand_mentioned, is_top, category
                     )
 
                     # Raw response
