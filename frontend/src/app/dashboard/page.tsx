@@ -15,6 +15,7 @@ import {
   AlertCircle,
   Inbox,
 } from "lucide-react";
+import ExportDropdown from "@/components/ExportDropdown";
 import {
   LineChart,
   Line,
@@ -91,7 +92,8 @@ const ENGINE_DISPLAY_NAMES: Record<string, string> = {
 // ── Main page ───────────────────────────────────────────────
 
 export default function DashboardOverview() {
-  const { brandId } = useBrand();
+  const { brandId, brands } = useBrand();
+  const brandName = brands.find((b) => b.id === brandId)?.name || "Brand";
   const [data, setData] = useState<OverviewData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -292,6 +294,7 @@ export default function DashboardOverview() {
           {runMessage && (
             <span className="text-sm text-gray-500">{runMessage}</span>
           )}
+          {data && <ExportDropdown data={data} brandName={brandName} />}
           <button
             onClick={handleRunScan}
             disabled={runLoading}
