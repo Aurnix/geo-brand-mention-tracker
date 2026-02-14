@@ -8,7 +8,7 @@
 
 import pytest
 from uuid import uuid4
-from datetime import date
+from datetime import date, timedelta
 
 from app.models.result import QueryResult
 
@@ -262,3 +262,199 @@ class TestCompetitorComparison:
             headers=auth_headers,
         )
         assert response.status_code == 404
+
+    async def test_competitor_comparison_date_scoping(
+        self,
+        client,
+        auth_headers,
+        db_session,
+        sample_brand,
+        sample_competitor,
+        sample_query,
+    ):
+        """The `days` parameter should limit results to the given window."""
+        today = date.today()
+        # Create a recent result (today) and an old result (60 days ago)
+        recent = QueryResult(
+            id=uuid4(),
+            query_id=sample_query.id,
+            engine="openai",
+            model_version="gpt-4o",
+            raw_response="TestBrand is great.",
+            brand_mentioned=True,
+            mention_position="first",
+            is_top_recommendation=True,
+            sentiment="positive",
+            competitor_mentions={
+                "CompetitorA": {
+                    "mentioned": True,
+                    "sentiment": "positive",
+                    "position": "early",
+                    "is_top_recommendation": False,
+                }
+            },
+            citations=None,
+            run_date=today,
+        )
+        old = QueryResult(
+            id=uuid4(),
+            query_id=sample_query.id,
+            engine="anthropic",
+            model_version="claude-sonnet",
+            raw_response="TestBrand is okay.",
+            brand_mentioned=True,
+            mention_position="middle",
+            is_top_recommendation=False,
+            sentiment="neutral",
+            competitor_mentions={
+                "CompetitorA": {
+                    "mentioned": True,
+                    "sentiment": "negative",
+                    "position": "first",
+                    "is_top_recommendation": True,
+                }
+            },
+            citations=None,
+            run_date=today - timedelta(days=60),
+        )
+        db_session.add_all([recent, old])
+        await db_session.commit()
+
+        brand_id = str(sample_brand.id)
+
+        # Without days filter: both results included
+        resp_all = await client.get(
+            f"/api/brands/{brand_id}/competitors/comparison",
+            headers=auth_headers,
+        )
+        assert resp_all.status_code == 200
+        data_all = resp_all.json()
+        assert data_all["brand"]["mention_rate"] > 0
+
+        # With days=7: only the recent result
+        resp_scoped = await client.get(
+            f"/api/brands/{brand_id}/competitors/comparison?days=7",
+            headers=auth_headers,
+        )
+        assert resp_scoped.status_code == 200
+        data_scoped = resp_scoped.json()
+        # The recent result has positive sentiment for brand
+        assert data_scoped["brand"]["sentiment_breakdown"]["positive"] == 1
+        assert data_scoped["brand"]["sentiment_breakdown"]["neutral"] == 0
+
+    async def test_competitor_comparison_query_winners_with_top_rec(
+        self,
+        client,
+        auth_headers,
+        db_session,
+        sample_brand,
+        sample_competitor,
+        sample_query,
+    ):
+        """When a competitor has is_top_recommendation=True and the brand
+        does not, the competitor should be the winner for that engine."""
+        today = date.today()
+        result = QueryResult(
+            id=uuid4(),
+            query_id=sample_query.id,
+            engine="anthropic",
+            model_version="claude-sonnet",
+            raw_response="CompetitorA is the best choice.",
+            brand_mentioned=True,
+            mention_position="late",
+            is_top_recommendation=False,
+            sentiment="neutral",
+            competitor_mentions={
+                "CompetitorA": {
+                    "mentioned": True,
+                    "sentiment": "positive",
+                    "position": "first",
+                    "is_top_recommendation": True,
+                }
+            },
+            citations=None,
+            run_date=today,
+        )
+        db_session.add(result)
+        await db_session.commit()
+
+        brand_id = str(sample_brand.id)
+        response = await client.get(
+            f"/api/brands/{brand_id}/competitors/comparison",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+
+        # Find the query winner entry
+        qw = next(
+            (w for w in data["query_winners"]
+             if w["query_text"] == "What is the best testing tool?"),
+            None,
+        )
+        assert qw is not None
+        # The anthropic engine winner should be CompetitorA
+        assert qw["winners"].get("anthropic") == "CompetitorA"
+
+
+class TestOverviewSentimentFilter:
+    async def test_sentiment_excludes_unmentioned_results(
+        self,
+        client,
+        auth_headers,
+        db_session,
+        sample_brand,
+        sample_query,
+    ):
+        """Sentiment breakdown should only count results where the brand
+        is actually mentioned, not inflate neutral counts from misses."""
+        results = [
+            QueryResult(
+                id=uuid4(),
+                query_id=sample_query.id,
+                engine="openai",
+                model_version="gpt-4o",
+                raw_response="TestBrand is great.",
+                brand_mentioned=True,
+                mention_position="first",
+                is_top_recommendation=True,
+                sentiment="positive",
+                competitor_mentions={},
+                citations=None,
+                run_date=date(2026, 2, 1),
+            ),
+            QueryResult(
+                id=uuid4(),
+                query_id=sample_query.id,
+                engine="anthropic",
+                model_version="claude-sonnet",
+                raw_response="There are many tools available.",
+                brand_mentioned=False,
+                mention_position="not_mentioned",
+                is_top_recommendation=False,
+                sentiment="neutral",
+                competitor_mentions={},
+                citations=None,
+                run_date=date(2026, 2, 2),
+            ),
+        ]
+        for r in results:
+            db_session.add(r)
+        await db_session.commit()
+
+        brand_id = str(sample_brand.id)
+        response = await client.get(
+            f"/api/brands/{brand_id}/overview",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+
+        # 2 total runs, 1 mentioned
+        assert data["total_runs"] == 2
+        assert data["mention_rate"] == 0.5
+
+        # Sentiment should only reflect the 1 mentioned result (positive)
+        # The unmentioned result's "neutral" should NOT be counted
+        assert data["sentiment_breakdown"]["positive"] == 1
+        assert data["sentiment_breakdown"]["neutral"] == 0

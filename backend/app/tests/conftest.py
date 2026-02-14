@@ -274,6 +274,7 @@ async def sample_results(db_session, sample_query):
                     "mentioned": True,
                     "sentiment": "neutral",
                     "position": "middle",
+                    "is_top_recommendation": False,
                 }
             },
             citations=None,

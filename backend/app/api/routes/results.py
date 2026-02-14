@@ -1,3 +1,4 @@
+from datetime import date, timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -135,6 +136,8 @@ async def get_overview(
 
     sentiment_counts = SentimentBreakdown()
     for r in results_list:
+        if not r.brand_mentioned:
+            continue
         if r.sentiment == "positive":
             sentiment_counts.positive += 1
         elif r.sentiment == "neutral":
@@ -213,6 +216,7 @@ async def get_query_history(
 )
 async def get_competitor_comparison(
     brand_id: UUID,
+    days: int | None = Query(None, ge=1, description="Limit to the last N days of results"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> CompetitorComparisonResponse:
@@ -230,6 +234,11 @@ async def get_competitor_comparison(
         .join(MonitoredQuery, QueryResult.query_id == MonitoredQuery.id)
         .where(MonitoredQuery.brand_id == brand_id)
     )
+    if days is not None:
+        cutoff = date.today() - timedelta(days=days)
+        all_results_query = all_results_query.where(
+            QueryResult.run_date >= cutoff
+        )
     all_results = await db.execute(all_results_query)
     results_list = all_results.scalars().all()
 

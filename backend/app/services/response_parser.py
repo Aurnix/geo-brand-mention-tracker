@@ -93,22 +93,25 @@ class ResponseParser:
 
     @staticmethod
     def _name_in_text(names: list[str], text: str) -> bool:
-        """Return True if any of *names* appears in *text* (case-insensitive)."""
-        lower_text = text.lower()
+        """Return True if any of *names* appears in *text* as a whole word
+        (case-insensitive).  Uses ``\\b`` word boundaries to avoid false
+        positives like matching "Notion" inside "emotional"."""
         for name in names:
-            if name.lower() in lower_text:
+            pattern = r"\b" + re.escape(name) + r"\b"
+            if re.search(pattern, text, re.IGNORECASE):
                 return True
         return False
 
     @staticmethod
     def _first_occurrence(names: list[str], text: str) -> int | None:
-        """Return the character index of the earliest occurrence of any name."""
-        lower_text = text.lower()
+        """Return the character index of the earliest whole-word occurrence
+        of any name (case-insensitive)."""
         earliest: int | None = None
         for name in names:
-            idx = lower_text.find(name.lower())
-            if idx != -1 and (earliest is None or idx < earliest):
-                earliest = idx
+            pattern = r"\b" + re.escape(name) + r"\b"
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match and (earliest is None or match.start() < earliest):
+                earliest = match.start()
         return earliest
 
     def _compute_mention_position(
@@ -243,7 +246,8 @@ class ResponseParser:
         """Analyze competitor mentions in the response.
 
         For each competitor, determines: mentioned (bool), position (str),
-        and sentiment (str). Batches LLM calls for efficiency.
+        sentiment (str), and is_top_recommendation (bool).  Batches LLM
+        calls for efficiency.
 
         Returns:
             Dict keyed by competitor name with sub-dict of analytics.
@@ -262,6 +266,7 @@ class ResponseParser:
                     "mentioned": False,
                     "position": "not_mentioned",
                     "sentiment": "neutral",
+                    "is_top_recommendation": False,
                 }
             else:
                 position = self._compute_mention_position(
@@ -271,27 +276,33 @@ class ResponseParser:
                     "mentioned": True,
                     "position": position,
                     "sentiment": "neutral",  # placeholder until LLM call
+                    "is_top_recommendation": False,  # placeholder
                 }
                 mentioned_competitors.append(comp)
 
-        # Batch LLM sentiment call for all mentioned competitors
+        # Batch LLM call for sentiment + top recommendation
         if mentioned_competitors:
-            sentiments = await self._batch_competitor_sentiment(
+            analysis = await self._batch_competitor_analysis(
                 raw_response, mentioned_competitors
             )
-            for comp_name, sent in sentiments.items():
+            for comp_name, data in analysis.items():
                 if comp_name in results:
-                    results[comp_name]["sentiment"] = sent
+                    results[comp_name]["sentiment"] = data["sentiment"]
+                    results[comp_name]["is_top_recommendation"] = data[
+                        "is_top_recommendation"
+                    ]
 
         return results
 
-    async def _batch_competitor_sentiment(
+    async def _batch_competitor_analysis(
         self, raw_response: str, competitors: list[dict]
-    ) -> dict[str, str]:
-        """Call the LLM once to get sentiment for all mentioned competitors.
+    ) -> dict[str, dict]:
+        """Call the LLM once to get sentiment and top-recommendation status
+        for all mentioned competitors.
 
         Returns:
-            Dict mapping competitor name -> sentiment string.
+            Dict mapping competitor name -> {"sentiment": str,
+            "is_top_recommendation": bool}.
         """
         comp_names = [c["name"] for c in competitors]
         numbered = "\n".join(
@@ -299,16 +310,17 @@ class ResponseParser:
         )
 
         prompt = (
-            f"Analyze the following AI-generated response for sentiment "
-            f"toward each of the listed brands/products.\n\n"
+            f"Analyze the following AI-generated response for each of the "
+            f"listed brands/products.\n\n"
             f"--- BEGIN RESPONSE ---\n{raw_response}\n--- END RESPONSE ---\n\n"
             f"Brands to analyze:\n{numbered}\n\n"
-            f"For each brand, respond with ONLY the brand name followed by a "
-            f"colon and exactly one sentiment word: positive, neutral, "
-            f"negative, or mixed. One per line, in the same order.\n"
+            f"For each brand, respond with the brand name followed by a colon, "
+            f"then the sentiment (positive, neutral, negative, or mixed) and "
+            f"whether it is the top/primary recommendation (top=yes or top=no).\n"
+            f"One per line, in the same order.\n"
             f"Example format:\n"
-            f"BrandA: positive\n"
-            f"BrandB: neutral"
+            f"BrandA: positive, top=no\n"
+            f"BrandB: neutral, top=yes"
         )
 
         response = await self.client.chat.completions.create(
@@ -329,31 +341,44 @@ class ResponseParser:
 
         answer = (response.choices[0].message.content or "").strip()
         valid_sentiments = {"positive", "neutral", "negative", "mixed"}
-        sentiments: dict[str, str] = {}
+        analysis: dict[str, dict] = {}
 
         lines = [line.strip() for line in answer.splitlines() if line.strip()]
 
         for line in lines:
-            # Try to parse "Name: sentiment" format
             if ":" in line:
                 parts = line.split(":", 1)
                 raw_name = parts[0].strip()
-                raw_sentiment = parts[1].strip().lower()
-                raw_sentiment = re.sub(r"[^a-z]", "", raw_sentiment)
+                rest = parts[1].strip().lower()
 
-                # Match the raw_name to one of the known competitor names
+                # Parse sentiment
+                sentiment = "neutral"
+                for s in valid_sentiments:
+                    if s in rest:
+                        sentiment = s
+                        break
+
+                # Parse top recommendation
+                is_top = "top=yes" in rest
+
                 matched_name = self._match_competitor_name(
                     raw_name, comp_names
                 )
-                if matched_name and raw_sentiment in valid_sentiments:
-                    sentiments[matched_name] = raw_sentiment
+                if matched_name:
+                    analysis[matched_name] = {
+                        "sentiment": sentiment,
+                        "is_top_recommendation": is_top,
+                    }
 
-        # Ensure every mentioned competitor has a sentiment entry
+        # Ensure every mentioned competitor has an entry
         for name in comp_names:
-            if name not in sentiments:
-                sentiments[name] = "neutral"
+            if name not in analysis:
+                analysis[name] = {
+                    "sentiment": "neutral",
+                    "is_top_recommendation": False,
+                }
 
-        return sentiments
+        return analysis
 
     @staticmethod
     def _match_competitor_name(

@@ -50,6 +50,31 @@ class TestBrandMentionDetection:
         text = "Among the options, TESTBRAND stands out."
         assert parser._name_in_text(["TestBrand"], text) is True
 
+    def test_no_false_positive_substring(self):
+        """'Notion' should NOT match inside 'prenotion' or 'notional'."""
+        parser = ResponseParser.__new__(ResponseParser)
+        assert parser._name_in_text(["Notion"], "This is a notional concept.") is False
+        assert parser._name_in_text(["Notion"], "A prenotion about the topic.") is False
+
+    def test_no_false_positive_short_name(self):
+        """Short brand names should not match within larger words."""
+        parser = ResponseParser.__new__(ResponseParser)
+        assert parser._name_in_text(["AI"], "I sent an email today.") is False
+        assert parser._name_in_text(["Go"], "It is a good language.") is False
+
+    def test_word_boundary_with_punctuation(self):
+        """Brand names adjacent to punctuation should still match."""
+        parser = ResponseParser.__new__(ResponseParser)
+        assert parser._name_in_text(["Notion"], "I use Notion.") is True
+        assert parser._name_in_text(["Notion"], "Notion's features are great.") is True
+        assert parser._name_in_text(["Notion"], "Try Notion, it's good.") is True
+        assert parser._name_in_text(["Notion"], "(Notion)") is True
+
+    def test_word_boundary_with_hyphenated_alias(self):
+        """Aliases with hyphens should match as whole tokens."""
+        parser = ResponseParser.__new__(ResponseParser)
+        assert parser._name_in_text(["test-brand"], "Try test-brand today.") is True
+
 
 class TestMentionPosition:
     def _make_parser(self):
@@ -206,11 +231,11 @@ class TestCompetitorMentions:
         parser.model = "gpt-4o-mini"
 
         # First call: _llm_brand_analysis for the brand
-        # Second call: _batch_competitor_sentiment for competitors
+        # Second call: _batch_competitor_analysis for competitors
         parser.client.chat.completions.create = AsyncMock(
             side_effect=[
                 _make_chat_response("1. yes\n2. positive"),
-                _make_chat_response("CompetitorA: neutral"),
+                _make_chat_response("CompetitorA: neutral, top=no"),
             ]
         )
 
@@ -224,6 +249,7 @@ class TestCompetitorMentions:
         assert "CompetitorA" in result.competitor_mentions
         assert result.competitor_mentions["CompetitorA"]["mentioned"] is True
         assert result.competitor_mentions["CompetitorA"]["sentiment"] == "neutral"
+        assert result.competitor_mentions["CompetitorA"]["is_top_recommendation"] is False
 
     @patch("app.services.response_parser.ResponseParser.__init__", return_value=None)
     async def test_competitor_not_mentioned(self, mock_init):
@@ -244,6 +270,42 @@ class TestCompetitorMentions:
         )
         assert "CompetitorA" in result.competitor_mentions
         assert result.competitor_mentions["CompetitorA"]["mentioned"] is False
+        assert result.competitor_mentions["CompetitorA"]["is_top_recommendation"] is False
+
+    @patch("app.services.response_parser.ResponseParser.__init__", return_value=None)
+    async def test_competitor_is_top_recommendation(self, mock_init):
+        """When the LLM says a competitor is the top recommendation, it
+        should be reflected in the parsed result."""
+        parser = ResponseParser()
+        parser.client = AsyncMock()
+        parser.model = "gpt-4o-mini"
+
+        parser.client.chat.completions.create = AsyncMock(
+            side_effect=[
+                _make_chat_response("1. no\n2. neutral"),
+                _make_chat_response(
+                    "CompetitorA: positive, top=yes\nCompetitorB: neutral, top=no"
+                ),
+            ]
+        )
+
+        result = await parser.parse(
+            raw_response=(
+                "TestBrand is okay. CompetitorA is the best option. "
+                "CompetitorB is also available."
+            ),
+            brand_name="TestBrand",
+            brand_aliases=[],
+            competitors=[
+                {"name": "CompetitorA", "aliases": []},
+                {"name": "CompetitorB", "aliases": []},
+            ],
+            citations=None,
+        )
+        assert result.competitor_mentions["CompetitorA"]["is_top_recommendation"] is True
+        assert result.competitor_mentions["CompetitorA"]["sentiment"] == "positive"
+        assert result.competitor_mentions["CompetitorB"]["is_top_recommendation"] is False
+        assert result.competitor_mentions["CompetitorB"]["sentiment"] == "neutral"
 
     @patch("app.services.response_parser.ResponseParser.__init__", return_value=None)
     async def test_citations_passed_through(self, mock_init):
