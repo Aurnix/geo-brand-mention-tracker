@@ -45,7 +45,7 @@ class TestOpenAIEngine:
         mock_choice.message = mock_message
         mock_completion = MagicMock()
         mock_completion.choices = [mock_choice]
-        mock_completion.model = "gpt-4o-2024-01-01"
+        mock_completion.model = "gpt-5.2"
 
         mock_client.chat.completions.create.return_value = mock_completion
 
@@ -54,7 +54,7 @@ class TestOpenAIEngine:
 
         assert isinstance(result, EngineResponse)
         assert "TestBrand" in result.raw_text
-        assert result.model_version == "gpt-4o-2024-01-01"
+        assert result.model_version == "gpt-5.2"
 
 
 class TestAnthropicEngine:

@@ -21,7 +21,7 @@ Whether your brand shows up in those AI-generated answers is becoming as importa
 
 ## Features
 
-- **Multi-engine tracking** — Query ChatGPT (GPT-4o), Claude (Sonnet), Perplexity (Sonar), and Gemini (2.0 Flash) from a single dashboard
+- **Multi-engine tracking** — Query ChatGPT (GPT-5.2), Claude (Sonnet), Perplexity (Sonar), and Gemini (2.0 Flash) from a single dashboard
 - **Brand mention detection** — Word-boundary matching (not substring) across brand names and aliases, preventing false positives
 - **Sentiment analysis** — LLM-powered detection of positive, neutral, negative, and mixed sentiment
 - **Position tracking** — First mention? Top recommendation? Early, middle, or late in the response?
@@ -45,7 +45,7 @@ GeoTrack's analysis pipeline runs in two stages for each query+engine combinatio
 
 **Stage 1 — Text analysis (deterministic).** Word-boundary regex matching (`\b` boundaries, not substring search) checks whether your brand and each competitor appear in the AI-generated response. This prevents false positives — "Notion" won't match inside "notional" or "emotional". For each detected mention, GeoTrack records its position in the response (first, early, middle, late) based on the character offset relative to the full response length.
 
-**Stage 2 — LLM-powered classification (gpt-4o-mini).** For mentioned brands, a lightweight LLM call determines: (1) whether the brand is the **top/primary recommendation**, and (2) the **sentiment** of the mention (positive, neutral, negative, or mixed). Competitors are analyzed in a single batched LLM call that extracts both sentiment and top-recommendation status for each mentioned competitor. Non-mentioned entities skip the LLM call entirely, reducing cost and latency.
+**Stage 2 — LLM-powered classification (Claude Haiku).** For mentioned brands, a lightweight LLM call determines: (1) whether the brand is the **top/primary recommendation**, and (2) the **sentiment** of the mention (positive, neutral, negative, or mixed). Competitors are analyzed in a single batched LLM call that extracts both sentiment and top-recommendation status for each mentioned competitor. Non-mentioned entities skip the LLM call entirely, reducing cost and latency.
 
 **Aggregation.** The dashboard rolls up per-result data into actionable metrics:
 - **Mention rate** — percentage of query runs where the brand appeared, overall and per-engine
@@ -97,8 +97,8 @@ GeoTrack queries AI engines on your behalf. You'll need API keys for the engines
 
 | Engine | Get a key | Required? |
 |--------|----------|-----------|
-| OpenAI | [platform.openai.com](https://platform.openai.com) | Yes (also used for response parsing) |
-| Anthropic | [console.anthropic.com](https://console.anthropic.com) | Yes (free tier) |
+| OpenAI | [platform.openai.com](https://platform.openai.com) | Yes |
+| Anthropic | [console.anthropic.com](https://console.anthropic.com) | Yes (also used for response parsing via Haiku) |
 | Perplexity | [docs.perplexity.ai](https://docs.perplexity.ai) | Optional (Pro tier) |
 | Google Gemini | [aistudio.google.com](https://aistudio.google.com) | Optional (Pro tier) |
 
@@ -120,8 +120,8 @@ GeoTrack queries AI engines on your behalf. You'll need API keys for the engines
           ┌────────┬───────┼────────┬─────────┐
           ▼        ▼       ▼        ▼         ▼
      ┌────────┐┌───────┐┌────────┐┌───────┐┌─────────┐
-     │ OpenAI ││Claude ││Perplx. ││Gemini ││gpt-4o-  │
-     │ gpt-4o ││Sonnet ││ Sonar  ││ Flash ││mini     │
+     │ OpenAI ││Claude ││Perplx. ││Gemini ││Claude   │
+     │gpt-5.2 ││Sonnet ││ Sonar  ││ Flash ││Haiku    │
      └────────┘└───────┘└────────┘└───────┘│(parser) │
                                            └─────────┘
 ```

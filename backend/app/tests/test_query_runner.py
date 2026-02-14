@@ -25,7 +25,7 @@ async def runner(db_session):
 def mock_engine_response():
     return EngineResponse(
         raw_text="TestBrand is a great tool for managing projects.",
-        model_version="gpt-4o-test",
+        model_version="gpt-5.2-test",
         citations=["https://example.com"],
     )
 
@@ -196,7 +196,7 @@ class TestRunBrand:
             id=uuid4(),
             query_id=sample_query.id,
             engine="openai",
-            model_version="gpt-4o",
+            model_version="gpt-5.2",
             raw_response="existing",
             brand_mentioned=False,
             mention_position="not_mentioned",

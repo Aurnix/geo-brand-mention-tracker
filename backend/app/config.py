@@ -20,8 +20,8 @@ class Settings(BaseSettings):
     PERPLEXITY_API_KEY: str = ""
     GOOGLE_AI_API_KEY: str = ""
 
-    PARSER_MODEL: str = "gpt-4o-mini"
-    PARSER_PROVIDER: str = "openai"
+    PARSER_MODEL: str = "claude-haiku-4-5-20251001"
+    PARSER_PROVIDER: str = "anthropic"
 
     CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
 

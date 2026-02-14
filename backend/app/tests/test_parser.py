@@ -1,6 +1,6 @@
 """Tests for the ResponseParser service.
 
-The parser uses the OpenAI client for LLM calls, so we mock those.
+The parser uses the Anthropic client for LLM calls, so we mock those.
 Text-analysis methods (_name_in_text, _compute_mention_position) are tested directly.
 """
 
@@ -14,14 +14,12 @@ from app.services.response_parser import ResponseParser, ParsedResult
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_chat_response(content: str):
-    """Build a minimal mock of an OpenAI chat completion response."""
-    message = MagicMock()
-    message.content = content
-    choice = MagicMock()
-    choice.message = message
+def _make_anthropic_response(content: str):
+    """Build a minimal mock of an Anthropic messages API response."""
+    text_block = MagicMock()
+    text_block.text = content
     response = MagicMock()
-    response.choices = [choice]
+    response.content = [text_block]
     return response
 
 
@@ -123,7 +121,7 @@ class TestParseBrandNotMentioned:
     async def test_brand_not_mentioned_returns_defaults(self, mock_init):
         parser = ResponseParser()
         parser.client = AsyncMock()
-        parser.model = "gpt-4o-mini"
+        parser.model = "claude-haiku-4-5-20251001"
 
         result = await parser.parse(
             raw_response="There are many great testing tools available.",
@@ -143,11 +141,11 @@ class TestSentimentParsing:
     async def test_sentiment_positive(self, mock_init):
         parser = ResponseParser()
         parser.client = AsyncMock()
-        parser.model = "gpt-4o-mini"
+        parser.model = "claude-haiku-4-5-20251001"
 
         # Mock the LLM response for _llm_brand_analysis
-        parser.client.chat.completions.create = AsyncMock(
-            return_value=_make_chat_response("1. yes\n2. positive")
+        parser.client.messages.create = AsyncMock(
+            return_value=_make_anthropic_response("1. yes\n2. positive")
         )
 
         result = await parser.parse(
@@ -165,10 +163,10 @@ class TestSentimentParsing:
     async def test_sentiment_negative(self, mock_init):
         parser = ResponseParser()
         parser.client = AsyncMock()
-        parser.model = "gpt-4o-mini"
+        parser.model = "claude-haiku-4-5-20251001"
 
-        parser.client.chat.completions.create = AsyncMock(
-            return_value=_make_chat_response("1. no\n2. negative")
+        parser.client.messages.create = AsyncMock(
+            return_value=_make_anthropic_response("1. no\n2. negative")
         )
 
         result = await parser.parse(
@@ -188,10 +186,10 @@ class TestTopRecommendation:
     async def test_top_recommendation_yes(self, mock_init):
         parser = ResponseParser()
         parser.client = AsyncMock()
-        parser.model = "gpt-4o-mini"
+        parser.model = "claude-haiku-4-5-20251001"
 
-        parser.client.chat.completions.create = AsyncMock(
-            return_value=_make_chat_response("1. yes\n2. positive")
+        parser.client.messages.create = AsyncMock(
+            return_value=_make_anthropic_response("1. yes\n2. positive")
         )
 
         result = await parser.parse(
@@ -207,10 +205,10 @@ class TestTopRecommendation:
     async def test_top_recommendation_no(self, mock_init):
         parser = ResponseParser()
         parser.client = AsyncMock()
-        parser.model = "gpt-4o-mini"
+        parser.model = "claude-haiku-4-5-20251001"
 
-        parser.client.chat.completions.create = AsyncMock(
-            return_value=_make_chat_response("1. no\n2. neutral")
+        parser.client.messages.create = AsyncMock(
+            return_value=_make_anthropic_response("1. no\n2. neutral")
         )
 
         result = await parser.parse(
@@ -228,14 +226,14 @@ class TestCompetitorMentions:
     async def test_competitor_mentioned(self, mock_init):
         parser = ResponseParser()
         parser.client = AsyncMock()
-        parser.model = "gpt-4o-mini"
+        parser.model = "claude-haiku-4-5-20251001"
 
         # First call: _llm_brand_analysis for the brand
         # Second call: _batch_competitor_analysis for competitors
-        parser.client.chat.completions.create = AsyncMock(
+        parser.client.messages.create = AsyncMock(
             side_effect=[
-                _make_chat_response("1. yes\n2. positive"),
-                _make_chat_response("CompetitorA: neutral, top=no"),
+                _make_anthropic_response("1. yes\n2. positive"),
+                _make_anthropic_response("CompetitorA: neutral, top=no"),
             ]
         )
 
@@ -255,10 +253,10 @@ class TestCompetitorMentions:
     async def test_competitor_not_mentioned(self, mock_init):
         parser = ResponseParser()
         parser.client = AsyncMock()
-        parser.model = "gpt-4o-mini"
+        parser.model = "claude-haiku-4-5-20251001"
 
-        parser.client.chat.completions.create = AsyncMock(
-            return_value=_make_chat_response("1. yes\n2. positive")
+        parser.client.messages.create = AsyncMock(
+            return_value=_make_anthropic_response("1. yes\n2. positive")
         )
 
         result = await parser.parse(
@@ -278,12 +276,12 @@ class TestCompetitorMentions:
         should be reflected in the parsed result."""
         parser = ResponseParser()
         parser.client = AsyncMock()
-        parser.model = "gpt-4o-mini"
+        parser.model = "claude-haiku-4-5-20251001"
 
-        parser.client.chat.completions.create = AsyncMock(
+        parser.client.messages.create = AsyncMock(
             side_effect=[
-                _make_chat_response("1. no\n2. neutral"),
-                _make_chat_response(
+                _make_anthropic_response("1. no\n2. neutral"),
+                _make_anthropic_response(
                     "CompetitorA: positive, top=yes\nCompetitorB: neutral, top=no"
                 ),
             ]
@@ -311,10 +309,10 @@ class TestCompetitorMentions:
     async def test_citations_passed_through(self, mock_init):
         parser = ResponseParser()
         parser.client = AsyncMock()
-        parser.model = "gpt-4o-mini"
+        parser.model = "claude-haiku-4-5-20251001"
 
-        parser.client.chat.completions.create = AsyncMock(
-            return_value=_make_chat_response("1. no\n2. neutral")
+        parser.client.messages.create = AsyncMock(
+            return_value=_make_anthropic_response("1. no\n2. neutral")
         )
 
         citations = ["https://example.com/review"]

@@ -14,7 +14,7 @@ class OpenAIEngine(BaseEngine):
     def __init__(self) -> None:
         settings = get_settings()
         self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-        self.model = "gpt-4o"
+        self.model = "gpt-5.2"
 
     async def run_query(self, query_text: str) -> EngineResponse:
         response = await self.client.chat.completions.create(

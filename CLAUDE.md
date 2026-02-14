@@ -35,7 +35,7 @@ backend/
       result.py          # QueryResult (composite index on query_id, engine, run_date)
     schemas/             # Pydantic v2 schemas (from_attributes=True)
     engines/             # AI engine adapters (BaseEngine → EngineResponse)
-      openai_engine.py   # gpt-4o
+      openai_engine.py   # gpt-5.2
       anthropic_engine.py # claude-sonnet-4-20250514
       perplexity_engine.py # sonar-large (httpx, extracts citations)
       gemini_engine.py   # gemini-2.0-flash
@@ -72,7 +72,7 @@ frontend/
 - **Auth flow**: Backend issues JWT → NextAuth stores in session → `useAuth()` hook sets token on `api` client
 - **Brand context**: Dashboard layout provides `useBrand()` context (brandId, brands, setBrandId)
 - **Plan enforcement**: Checked in route handlers before create operations (brands, queries, competitors)
-- **Response parsing**: Cheap LLM calls (gpt-4o-mini) for sentiment + top-rec detection; text analysis for position
+- **Response parsing**: Cheap LLM calls (Claude Haiku) for sentiment + top-rec detection; text analysis for position
 - **Background tasks**: Manual run uses FastAPI `BackgroundTasks` with a fresh session
 
 ## Running

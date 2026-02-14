@@ -263,7 +263,7 @@ async def sample_results(db_session, sample_query):
             id=uuid4(),
             query_id=sample_query.id,
             engine="openai",
-            model_version="gpt-4o",
+            model_version="gpt-5.2",
             raw_response=f"TestBrand is a great tool for testing. Day {i}.",
             brand_mentioned=True,
             mention_position="first",

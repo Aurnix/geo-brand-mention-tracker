@@ -1,7 +1,7 @@
 import re
 from dataclasses import dataclass, field
 
-from openai import AsyncOpenAI
+import anthropic
 
 from app.config import get_settings
 
@@ -21,7 +21,7 @@ class ResponseParser:
 
     def __init__(self) -> None:
         settings = get_settings()
-        self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        self.client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
         self.model = settings.PARSER_MODEL
 
     async def parse(
@@ -198,23 +198,18 @@ class ResponseParser:
             f"Answer: positive, neutral, negative, or mixed"
         )
 
-        response = await self.client.chat.completions.create(
+        response = await self.client.messages.create(
             model=self.model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a precise text analyst. Follow the "
-                        "instructions exactly. Output only what is asked."
-                    ),
-                },
-                {"role": "user", "content": prompt},
-            ],
+            system=(
+                "You are a precise text analyst. Follow the "
+                "instructions exactly. Output only what is asked."
+            ),
+            messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
             max_tokens=50,
         )
 
-        answer = (response.choices[0].message.content or "").strip().lower()
+        answer = (response.content[0].text if response.content else "").strip().lower()
         lines = [line.strip() for line in answer.splitlines() if line.strip()]
 
         # Parse top recommendation
@@ -323,23 +318,18 @@ class ResponseParser:
             f"BrandB: neutral, top=yes"
         )
 
-        response = await self.client.chat.completions.create(
+        response = await self.client.messages.create(
             model=self.model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a precise text analyst. Follow the "
-                        "instructions exactly. Output only what is asked."
-                    ),
-                },
-                {"role": "user", "content": prompt},
-            ],
+            system=(
+                "You are a precise text analyst. Follow the "
+                "instructions exactly. Output only what is asked."
+            ),
+            messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
             max_tokens=200,
         )
 
-        answer = (response.choices[0].message.content or "").strip()
+        answer = (response.content[0].text if response.content else "").strip()
         valid_sentiments = {"positive", "neutral", "negative", "mixed"}
         analysis: dict[str, dict] = {}
 

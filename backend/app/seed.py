@@ -34,7 +34,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # Constants
 # ---------------------------------------------------------------------------
 ENGINES = [
-    ("openai", "gpt-4o-2025-06-01"),
+    ("openai", "gpt-5.2"),
     ("anthropic", "claude-sonnet-4-20250514"),
     ("perplexity", "llama-3.1-sonar-large-128k-online"),
     ("gemini", "gemini-2.0-flash"),
