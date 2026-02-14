@@ -37,8 +37,8 @@ describe("DemoLoginButton", () => {
 
     await waitFor(() => {
       expect(signIn).toHaveBeenCalledWith("credentials", {
-        email: "demo@geotrack.ai",
-        password: "demo1234",
+        email: "demo@geotrack.app",
+        password: "demo123456",
         redirect: false,
       });
     });

@@ -5,8 +5,8 @@ import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Loader2, Play } from "lucide-react";
 
-const DEMO_EMAIL = "demo@geotrack.ai";
-const DEMO_PASSWORD = "demo1234";
+const DEMO_EMAIL = "demo@geotrack.app";
+const DEMO_PASSWORD = "demo123456";
 
 export default function DemoLoginButton() {
   const router = useRouter();
