@@ -13,6 +13,7 @@ import {
   MessageSquare,
   Target,
 } from "lucide-react";
+import DemoLoginButton from "@/components/DemoLoginButton";
 
 const engines = [
   { name: "ChatGPT", color: "bg-green-500" },
@@ -201,7 +202,7 @@ export default function LandingPage() {
             </p>
 
             {/* CTAs */}
-            <div className="mt-10 flex items-center justify-center gap-4">
+            <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
               <Link
                 href="/signup"
                 className="btn-primary inline-flex items-center gap-2 px-6 py-3 text-base"
@@ -209,12 +210,7 @@ export default function LandingPage() {
                 Start tracking free
                 <ArrowRight className="h-4 w-4" />
               </Link>
-              <a
-                href="#how-it-works"
-                className="btn-secondary inline-flex items-center gap-2 px-6 py-3 text-base"
-              >
-                See how it works
-              </a>
+              <DemoLoginButton />
             </div>
 
             {/* Engine badges */}
