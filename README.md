@@ -1,6 +1,6 @@
 # GeoTrack
 
-**The rank tracker for the AI era.** Monitor how often your brand gets mentioned — and how favorably — when people ask ChatGPT, Claude, Perplexity, and Gemini the questions that matter to your business.
+Monitor how often your brand gets mentioned — and how favorably — when people ask ChatGPT, Claude, Perplexity, and Gemini the questions that matter to your business.
 
 ---
 
@@ -10,7 +10,7 @@ Search is fragmenting. Users increasingly ask AI assistants the questions they u
 
 Whether your brand shows up in those AI-generated answers is becoming as important as page-one SEO rankings. But until now, there's been no way to systematically track it.
 
-**GeoTrack fixes that.**
+
 
 ## How It Works
 
